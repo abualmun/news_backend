@@ -5,7 +5,7 @@ const sqlite3 = require('sqlite3')
 const bcrypt = require("bcrypt")
 app.use(express.json())
 
-const port = 8000
+const port = process.env.PORT || 5000
 
 let db = new sqlite3.Database('./db/news.db', (err) => {
     if (err) return console.log(err.message)
