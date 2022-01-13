@@ -1,10 +1,11 @@
-const e = require('express')
-const express = require('express')
-const app = express()
+const express = require("express")
+const app = express();
+const http = require('http').Server(app);
+const io = require('socket.io')(http);
 const sqlite3 = require('sqlite3')
 const bcrypt = require("bcrypt")
+const { json } = require('express')
 app.use(express.json())
-
 const port = process.env.PORT || 5000
 
 let db = new sqlite3.Database('./db/news.db', (err) => {
@@ -19,37 +20,28 @@ db.run('CREATE TABLE chat(id INTEGER PRIMARY KEY ,author TEXT,content TEXT,date 
     console.log('table created successfully')
 })
 
-app.post('/chat/post', (req, res) => {
-    const data = req.body;
-    author = data['author'];
-    content = data['content'];
-    date = data['date'];
-    const maxMessages = 100;
+io.on('connection', (socket) => {
+    console.log("user connected")
+    
+    db.all(`SELECT * FROM chat`, function (err, rows) {
+        if (err) return console.log(err.message)
+        console.log(rows)
+        socket.emit('connection', (rows))
+    })
 
-
-
-    db.run('INSERT INTO chat(author,content,date) VALUES (?,?,?) ', [author, content, date], function (err) {
-        if (err) {
-            return console.log(err.message)
-        }
-        console.log(`A row has been inserted with rowid ${this.lastID}`)
-
-        lastPostID = Math.max(data['id'], this.lastID - maxMessages);
-
-        db.all(`SELECT * FROM chat WHERE ID > ${lastPostID}`, function (err, rows) {
-            res.send(rows)
+    socket.on('post', (data) => {
+        console.log(data)
+        const post = JSON.parse(data)
+        console.log(data)
+        db.run('INSERT INTO chat(author,content,date) VALUES (?,?,?) ', [post.author, post.content, post.date], function (err) {
+            if (err) {
+                return console.log(err.message)
+            }
         })
+        socket.emit('post', (data))
     })
+
 })
-
-app.post('/chat', (req, res) => {
-    lastPostID = req.body['id']
-    db.all(`SELECT * FROM chat WHERE ID > ${lastPostID}`, function (err, rows) {
-        res.send(rows)
-    })
-})
-
-
 
 db.run('CREATE TABLE users(username TEXT,password TEXT)', function (err) {
     if (err)
@@ -57,12 +49,18 @@ db.run('CREATE TABLE users(username TEXT,password TEXT)', function (err) {
     console.log('table created successfully')
 })
 
+app.get('/', (req, res) => {
+    res.sendFile(__dirname + '/index.html')
+
+
+})
+
 app.post('/users', async (req, res) => {
 
     const username = req.body.username
     const password = req.body.password
 
-    db.get('SELECT * FROM users WHERE username = ?',[username], async (err, row) => {
+    db.get('SELECT * FROM users WHERE username = ?', [username], async (err, row) => {
         if (err) console.log(err)
         if (row) return res.send("username is taken.")
         try {
@@ -88,7 +86,7 @@ app.post('/users/login', async (req, res) => {
     const username = req.body.username
     const password = req.body.password
 
-    db.get('SELECT * FROM users WHERE username = ?',[username], async (err, row) => {
+    db.get('SELECT * FROM users WHERE username = ?', [username], async (err, row) => {
         if (err) console.log(err)
 
         if (row) {
@@ -102,7 +100,7 @@ app.post('/users/login', async (req, res) => {
             } catch (erorr) {
                 res.status(500).send()
             }
-        } else   res.send("wrong username")
+        } else res.send("wrong username")
 
 
     })
@@ -110,4 +108,4 @@ app.post('/users/login', async (req, res) => {
 
 
 })
-app.listen(port, () => console.log(`Example app listening on port ${port}!`))
+http.listen(port, () => console.log(`Example app listening on port ${port}!`))
